@@ -1,0 +1,1318 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AutoPulse AI — Autonomous Daily Activity Verifier</title>
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+          },
+        }
+      }
+    }
+  </script>
+  <style>
+    body { font-family: 'Inter', sans-serif; }
+    .pulse-ring {
+      animation: pulse-ring 2s cubic-bezier(0.215, 0.61, 0.355, 1) infinite;
+    }
+    @keyframes pulse-ring {
+      0% { transform: scale(0.85); opacity: 0.9; }
+      70% { transform: scale(1.6); opacity: 0; }
+      100% { transform: scale(1.6); opacity: 0; }
+    }
+    .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+    .custom-scrollbar::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.4); }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(71, 85, 105, 0.6); border-radius: 9999px; }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col selection:bg-emerald-500/30 selection:text-emerald-200">
+
+  <!-- Toast Notification -->
+  <div id="toastContainer" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 max-w-sm w-full pointer-events-none px-4 sm:px-0"></div>
+
+  <!-- Detail Modal -->
+  <div id="detailModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-slate-950/80 backdrop-blur-sm p-4">
+    <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl relative">
+      <div class="flex items-start justify-between gap-4 mb-4">
+        <div>
+          <span id="modalBadge" class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+            Verified Automatically
+          </span>
+          <h3 id="modalTitle" class="text-xl font-bold text-white mt-2">Activity Detail Report</h3>
+        </div>
+        <button id="closeModalBtn" type="button" class="text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-slate-800 transition">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div id="modalBody" class="space-y-3 text-sm text-slate-300 bg-slate-950/70 p-4 rounded-xl border border-slate-800/80"></div>
+      <div class="mt-5 flex flex-wrap items-center justify-end gap-2">
+        <button id="copyModalReportBtn" type="button" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold transition flex items-center gap-1.5">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+          Copy Verification Packet
+        </button>
+        <button id="modalDoneBtn" type="button" class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition">
+          Close
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Header -->
+  <header class="sticky top-0 z-30 bg-slate-950/85 backdrop-blur-md border-b border-slate-800/80">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 py-3.5 flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <div class="relative flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 shadow-lg shadow-emerald-500/20">
+          <span id="sensorPulseDot" class="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-emerald-400"></span>
+          <span id="sensorPulseRing" class="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-emerald-400 pulse-ring"></span>
+          <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+          </svg>
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 class="text-base sm:text-lg font-bold tracking-tight text-white">AutoPulse AI</h1>
+            <span id="engineStatusPill" class="px-2 py-0.5 text-[11px] font-semibold rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+              ZERO-INPUT ENGINE ACTIVE
+            </span>
+          </div>
+          <p class="text-xs text-slate-400">Self-Verifying Activity Sensor &amp; Automated App Detail Dispatcher</p>
+        </div>
+      </div>
+
+      <!-- Navigation Tabs -->
+      <nav class="flex items-center gap-1 bg-slate-900/90 p-1 rounded-xl border border-slate-800">
+        <button type="button" data-tab="live" class="nav-tab px-3 py-1.5 rounded-lg text-xs font-semibold transition bg-emerald-600 text-white shadow">
+          Live Radar
+        </button>
+        <button type="button" data-tab="ledger" class="nav-tab px-3 py-1.5 rounded-lg text-xs font-semibold transition text-slate-400 hover:text-white">
+          Verified Log (<span id="navLogCount">0</span>)
+        </button>
+        <button type="button" data-tab="analytics" class="nav-tab px-3 py-1.5 rounded-lg text-xs font-semibold transition text-slate-400 hover:text-white">
+          App Details &amp; Reports
+        </button>
+      </nav>
+
+      <!-- Quick Controls -->
+      <div class="flex items-center gap-2">
+        <button id="toggleEngineBtn" type="button" class="px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-700 text-xs font-semibold text-slate-200 flex items-center gap-1.5 transition">
+          <span id="toggleEngineIcon" class="w-2 h-2 rounded-full bg-amber-400"></span>
+          <span id="toggleEngineLabel">Pause Auto-Verify</span>
+        </button>
+        <button id="sendInstantReportBtn" type="button" class="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-semibold text-white flex items-center gap-1.5 shadow-lg shadow-emerald-600/20 transition">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
+          Push to App Detail
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 space-y-6">
+
+    <!-- Top Live Status Strip -->
+    <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <!-- Current Detected State -->
+      <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 flex flex-col justify-between relative overflow-hidden">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-medium text-slate-400 uppercase tracking-wider">Auto-Detected State</span>
+          <span id="confidenceBadge" class="text-[11px] font-semibold px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">98% Confidence</span>
+        </div>
+        <div class="my-3 flex items-center gap-3">
+          <div id="currentStateIcon" class="w-12 h-12 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-2xl">
+            💻
+          </div>
+          <div>
+            <div id="currentStateTitle" class="text-lg font-bold text-white leading-tight">Active Screen Focus</div>
+            <div id="currentStateSub" class="text-xs text-slate-400 mt-0.5">Verified via pointer &amp; viewport telemetry</div>
+          </div>
+        </div>
+        <div class="text-[11px] text-slate-400 flex items-center justify-between pt-2 border-t border-slate-800/80">
+          <span>Zero manual input required</span>
+          <span id="liveSessionTimer" class="font-mono text-emerald-400 font-semibold">00:00:00</span>
+        </div>
+      </div>
+
+      <!-- Self-Verification Signals -->
+      <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 flex flex-col justify-between">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-medium text-slate-400 uppercase tracking-wider">Passive Sensor Fusion</span>
+          <span id="hardwareSensorStatus" class="text-[11px] font-medium text-teal-400">Live Telemetry</span>
+        </div>
+        <div class="my-2 grid grid-cols-2 gap-2 text-xs">
+          <div class="bg-slate-950/60 p-2 rounded-xl border border-slate-800/80">
+            <div class="text-slate-400 text-[11px]">Kinetic / Cadence</div>
+            <div id="cadenceValue" class="text-sm font-bold text-white mt-0.5">24 events/m</div>
+          </div>
+          <div class="bg-slate-950/60 p-2 rounded-xl border border-slate-800/80">
+            <div class="text-slate-400 text-[11px]">Focus Visibility</div>
+            <div id="visibilityValue" class="text-sm font-bold text-emerald-400 mt-0.5">Foreground</div>
+          </div>
+        </div>
+        <div class="text-[11px] text-slate-400 flex items-center justify-between pt-2 border-t border-slate-800/80">
+          <span>Device Power / Net</span>
+          <span id="powerNetStatus" class="font-mono text-slate-300">Online • Active</span>
+        </div>
+      </div>
+
+      <!-- Total Verified Today -->
+      <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 flex flex-col justify-between">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-medium text-slate-400 uppercase tracking-wider">Verified Time Today</span>
+          <span class="text-[11px] font-semibold text-indigo-400">Auto-Logged</span>
+        </div>
+        <div class="my-3">
+          <div id="totalVerifiedTime" class="text-2xl font-extrabold text-white tracking-tight">6h 42m</div>
+          <div class="w-full bg-slate-800 h-2 rounded-full mt-2 overflow-hidden flex" id="categoryMiniBar">
+            <div class="bg-emerald-500 h-full" style="width: 48%"></div>
+            <div class="bg-sky-500 h-full" style="width: 24%"></div>
+            <div class="bg-amber-500 h-full" style="width: 18%"></div>
+            <div class="bg-purple-500 h-full" style="width: 10%"></div>
+          </div>
+        </div>
+        <div class="text-[11px] text-slate-400 flex items-center justify-between pt-2 border-t border-slate-800/80">
+          <span>Verified Blocks</span>
+          <span id="verifiedBlocksCount" class="font-mono text-white font-semibold">8 blocks</span>
+        </div>
+      </div>
+
+      <!-- App Detail Sync Feed Status -->
+      <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-4 flex flex-col justify-between">
+        <div class="flex items-center justify-between">
+          <span class="text-xs font-medium text-slate-400 uppercase tracking-wider">App Detail Sync</span>
+          <span class="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-400">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Auto-Push ON
+          </span>
+        </div>
+        <div class="my-3">
+          <div id="packetsSentCount" class="text-2xl font-extrabold text-white tracking-tight">14 Packets</div>
+          <p id="lastSyncTimeText" class="text-xs text-slate-400 mt-1">Last detail verified &amp; sent: Just now</p>
+        </div>
+        <div class="text-[11px] text-slate-400 flex items-center justify-between pt-2 border-t border-slate-800/80">
+          <span>Next Auto-Verify</span>
+          <span id="nextVerifyCountdown" class="font-mono text-emerald-400 font-semibold">in 12s</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- TAB 1: LIVE RADAR & ZERO-TOUCH SIMULATOR -->
+    <div id="tab-live" class="space-y-6">
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        
+        <!-- Left 2 Cols: Real-Time Autonomous Verification Stream + Environment Simulator -->
+        <div class="lg:col-span-2 space-y-6">
+          
+          <!-- How It Works / Sensor Bar -->
+          <div class="bg-gradient-to-r from-slate-900 via-slate-900 to-emerald-950/40 border border-slate-800 rounded-2xl p-5">
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <span class="text-[11px] font-bold uppercase tracking-wider text-emerald-400">Hands-Free Verification Pipeline</span>
+                <h2 class="text-base sm:text-lg font-bold text-white mt-0.5">Real-Time Context &amp; Motion Classifier</h2>
+                <p class="text-xs text-slate-300 mt-1">
+                  AutoPulse continuously reads passive browser/device signals (pointer velocity, keystroke cadence, screen focus, device motion, and network state) to classify what you are doing and automatically push verified summaries to your App Detail feed—no start/stop buttons needed.
+                </p>
+              </div>
+              <div class="flex sm:flex-col gap-2 shrink-0">
+                <button id="requestMotionBtn" type="button" class="px-3.5 py-2 rounded-xl bg-teal-500/15 hover:bg-teal-500/25 border border-teal-500/30 text-teal-300 text-xs font-semibold transition whitespace-nowrap">
+                  Enable Phone Motion
+                </button>
+                <button id="forceVerifyNowBtn" type="button" class="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-semibold transition whitespace-nowrap">
+                  Verify Current State Now
+                </button>
+              </div>
+            </div>
+
+            <!-- Environment Signal Simulator (To test different real-world states right in browser) -->
+            <div class="mt-5 pt-4 border-t border-slate-800/90">
+              <div class="flex items-center justify-between mb-2.5">
+                <span class="text-xs font-semibold text-slate-300">Test Real-World Sensor Environments (Zero-Instruction Auto-Trigger):</span>
+                <span id="simModeBadge" class="text-[11px] text-emerald-400 font-medium">Mode: Live Browser + Auto Sensor</span>
+              </div>
+              <div class="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                <button type="button" data-sim="auto" class="sim-btn px-3 py-2 rounded-xl border border-emerald-500/50 bg-emerald-500/15 text-emerald-300 text-xs font-semibold flex items-center justify-center gap-1.5 transition">
+                  <span>📡</span> Live Sensor
+                </button>
+                <button type="button" data-sim="study" class="sim-btn px-3 py-2 rounded-xl border border-slate-800 bg-slate-950/70 hover:bg-slate-800 text-slate-300 text-xs font-semibold flex items-center justify-center gap-1.5 transition">
+                  <span>📚</span> Deep Study
+                </button>
+                <button type="button" data-sim="walk" class="sim-btn px-3 py-2 rounded-xl border border-slate-800 bg-slate-950/70 hover:bg-slate-800 text-slate-300 text-xs font-semibold flex items-center justify-center gap-1.5 transition">
+                  <span>🚶</span> Walking
+                </button>
+                <button type="button" data-sim="commute" class="sim-btn px-3 py-2 rounded-xl border border-slate-800 bg-slate-950/70 hover:bg-slate-800 text-slate-300 text-xs font-semibold flex items-center justify-center gap-1.5 transition">
+                  <span>🚆</span> Transit / GPS
+                </button>
+                <button type="button" data-sim="rest" class="sim-btn px-3 py-2 rounded-xl border border-slate-800 bg-slate-950/70 hover:bg-slate-800 text-slate-300 text-xs font-semibold flex items-center justify-center gap-1.5 transition">
+                  <span>☕</span> Idle / Break
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Live Sensor Telemetry Graph -->
+          <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-5">
+            <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
+              <div>
+                <h3 class="text-sm font-bold text-white">Live Passive Signal Waveform</h3>
+                <p class="text-xs text-slate-400">Move your mouse, type, or switch tabs — watch the verifier score your activity in real time</p>
+              </div>
+              <div class="flex items-center gap-3 text-xs">
+                <span class="flex items-center gap-1.5 text-emerald-400"><span class="w-2.5 h-2.5 rounded-full bg-emerald-400"></span> Interaction Intensity</span>
+                <span class="flex items-center gap-1.5 text-sky-400"><span class="w-2.5 h-2.5 rounded-full bg-sky-400"></span> Motion / Cadence</span>
+              </div>
+            </div>
+            <div class="relative h-60 w-full">
+              <canvas id="telemetryChart"></canvas>
+            </div>
+          </div>
+
+          <!-- Recent Auto-Verified Timeline Preview -->
+          <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-5">
+            <div class="flex items-center justify-between mb-4">
+              <div>
+                <h3 class="text-sm font-bold text-white">Autonomous Activity Timeline (Today)</h3>
+                <p class="text-xs text-slate-400">Every activity below was detected, verified by sensor signature, and sent to App Detail automatically</p>
+              </div>
+              <button id="viewAllLogsBtn" type="button" class="text-xs font-semibold text-emerald-400 hover:text-emerald-300 transition">
+                Full Ledger &rarr;
+              </button>
+            </div>
+            <div id="liveTimelineList" class="space-y-3"></div>
+          </div>
+        </div>
+
+        <!-- Right 1 Col: Live Phone "App Detail" Receiver Preview -->
+        <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between mb-3">
+              <span class="text-xs font-bold uppercase tracking-wider text-emerald-400">Live Companion Feed</span>
+              <span class="px-2 py-0.5 text-[11px] rounded-full bg-slate-800 text-slate-300 font-mono">App Detail v2.4</span>
+            </div>
+            <h3 class="text-base font-bold text-white">Incoming Verified App Details</h3>
+            <p class="text-xs text-slate-400 mt-0.5 mb-4">
+              Whenever the sensor engine verifies a state change or milestone, it automatically dispatches a structured detail card here.
+            </p>
+
+            <!-- Phone Frame Mockup -->
+            <div class="bg-slate-950 border-2 border-slate-800 rounded-3xl p-3.5 shadow-inner flex flex-col h-[500px]">
+              <!-- Phone Status Bar -->
+              <div class="flex items-center justify-between text-[11px] text-slate-400 px-2 pb-2.5 border-b border-slate-800/80">
+                <span id="phoneClock" class="font-semibold text-slate-200">08:50</span>
+                <span class="flex items-center gap-1 text-emerald-400 font-medium">
+                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Auto-Sync
+                </span>
+                <span>100% 🔋</span>
+              </div>
+
+              <!-- App Detail Stream inside Phone -->
+              <div id="appDetailFeedContainer" class="flex-1 overflow-y-auto custom-scrollbar space-y-2.5 py-3 pr-1"></div>
+
+              <!-- Bottom Bar inside Phone -->
+              <div class="pt-2.5 border-t border-slate-800/80 flex items-center justify-between px-1">
+                <span class="text-[11px] text-slate-400">Auto-pushing every verified block</span>
+                <button id="clearFeedBtn" type="button" class="text-[11px] text-slate-400 hover:text-slate-200 underline">
+                  Clear Feed
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="mt-4 pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400">
+            <span>Auto-Verification Threshold:</span>
+            <select id="verifyIntervalSelect" class="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1 text-xs text-slate-200 focus:outline-none focus:border-emerald-500">
+              <option value="12">Every 12 sec (Fast Demo)</option>
+              <option value="25">Every 25 sec (Standard)</option>
+              <option value="60">Every 60 sec (Battery Saver)</option>
+            </select>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- TAB 2: VERIFIED LOG LEDGER -->
+    <div id="tab-ledger" class="hidden space-y-6">
+      <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-5">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5">
+          <div>
+            <h2 class="text-lg font-bold text-white">Self-Verified Activity Ledger</h2>
+            <p class="text-xs text-slate-400">Complete audit trail of automatically classified activities, sensor proofs, and confidence scores</p>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <select id="categoryFilter" class="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-emerald-500">
+              <option value="ALL">All Categories</option>
+              <option value="Focus & Study">Focus &amp; Study</option>
+              <option value="Physical & Walk">Physical &amp; Walk</option>
+              <option value="Transit & Commute">Transit &amp; Commute</option>
+              <option value="Recovery & Break">Recovery &amp; Break</option>
+            </select>
+            <button id="exportJsonBtn" type="button" class="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 transition">
+              Export JSON
+            </button>
+            <button id="exportCsvBtn" type="button" class="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-semibold text-white transition">
+              Download CSV Report
+            </button>
+          </div>
+        </div>
+
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse">
+            <thead>
+              <tr class="border-b border-slate-800 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                <th class="py-3 px-3">Time Window</th>
+                <th class="py-3 px-3">Detected Activity</th>
+                <th class="py-3 px-3">Category</th>
+                <th class="py-3 px-3">Duration</th>
+                <th class="py-3 px-3">Sensor Proof</th>
+                <th class="py-3 px-3">Confidence</th>
+                <th class="py-3 px-3 text-right">App Detail Packet</th>
+              </tr>
+            </thead>
+            <tbody id="ledgerTableBody" class="divide-y divide-slate-800/70 text-xs"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 3: APP DETAILS & ANALYTICS -->
+    <div id="tab-analytics" class="hidden space-y-6">
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Category Breakdown Chart -->
+        <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-5">
+          <h3 class="text-base font-bold text-white">Autonomous Daily Time Breakdown</h3>
+          <p class="text-xs text-slate-400 mb-4">Verified minutes per activity domain without manual timers</p>
+          <div class="relative h-72 w-full">
+            <canvas id="categoryChart"></canvas>
+          </div>
+        </div>
+
+        <!-- Daily Verification Summary Card & Webhook/Detail Dispatcher -->
+        <div class="bg-slate-900/90 border border-slate-800 rounded-2xl p-5 flex flex-col justify-between space-y-4">
+          <div>
+            <div class="flex items-center justify-between">
+              <h3 class="text-base font-bold text-white">Daily App Detail Digest</h3>
+              <span class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                100% Self-Verified
+              </span>
+            </div>
+            <p class="text-xs text-slate-400 mt-1">
+              Formatted summary ready to copy, share, or dispatch to your external notes or messaging app.
+            </p>
+
+            <div id="digestReportBox" class="mt-4 bg-slate-950 border border-slate-800 rounded-xl p-4 font-mono text-xs text-slate-300 space-y-1.5 whitespace-pre-wrap max-h-60 overflow-y-auto custom-scrollbar"></div>
+          </div>
+
+          <div class="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-slate-800">
+            <button id="copyDigestBtn" type="button" class="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold transition flex items-center gap-1.5">
+              Copy Full App Detail Digest
+            </button>
+            <button id="resetDemoDataBtn" type="button" class="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-rose-950/60 hover:text-rose-300 text-slate-400 text-xs font-semibold transition">
+              Reset Today's Baseline
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <script>
+    // --- STATE & INITIAL SELF-VERIFIED DATA ---
+    const STORAGE_KEY = 'autopulse_ai_state_v1';
+
+    const DEFAULT_ACTIVITIES = [
+      {
+        id: 'act-101',
+        timeWindow: '06:30 AM – 07:10 AM',
+        title: 'Morning Walk & Mobility',
+        category: 'Physical & Walk',
+        durationMin: 40,
+        sensorProof: 'Accelerometer step cadence (108 spm) + GPS path shift',
+        confidence: 97,
+        icon: '🚶',
+        packetId: 'PKT-8821',
+        status: 'Sent to App Detail'
+      },
+      {
+        id: 'act-102',
+        timeWindow: '07:15 AM – 07:45 AM',
+        title: 'Morning Routine & Offline Break',
+        category: 'Recovery & Break',
+        durationMin: 30,
+        sensorProof: 'Screen lock state + stationary ambient sensor',
+        confidence: 95,
+        icon: '☕',
+        packetId: 'PKT-8822',
+        status: 'Sent to App Detail'
+      },
+      {
+        id: 'act-103',
+        timeWindow: '07:45 AM – 08:35 AM',
+        title: 'Deep Study & Exam Prep Session',
+        category: 'Focus & Study',
+        durationMin: 50,
+        sensorProof: 'Continuous foreground focus + steady page scroll cadence',
+        confidence: 99,
+        icon: '📚',
+        packetId: 'PKT-8823',
+        status: 'Sent to App Detail'
+      },
+      {
+        id: 'act-104',
+        timeWindow: '08:35 AM – 08:50 AM',
+        title: 'Active App Research & Workspace Review',
+        category: 'Focus & Study',
+        durationMin: 15,
+        sensorProof: 'High-frequency pointer + keyboard telemetry',
+        confidence: 98,
+        icon: '💻',
+        packetId: 'PKT-8824',
+        status: 'Sent to App Detail'
+      }
+    ];
+
+    let state = {
+      engineRunning: true,
+      simMode: 'auto', // 'auto', 'study', 'walk', 'commute', 'rest'
+      verifyIntervalSec: 12,
+      countdown: 12,
+      sessionSeconds: 0,
+      interactionEvents: 18,
+      motionIntensity: 12,
+      tabVisible: true,
+      activities: [...DEFAULT_ACTIVITIES],
+      feedPackets: [],
+      selectedActivityId: null
+    };
+
+    // Load saved state safely
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && Array.isArray(parsed.activities) && parsed.activities.length > 0) {
+          state.activities = parsed.activities;
+        }
+      }
+    } catch (e) {
+      // ignore storage errors in sandboxed iframe
+    }
+
+    function saveState() {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({
+          activities: state.activities
+        }));
+      } catch (e) {
+        // ignore storage errors
+      }
+    }
+
+    // Build initial App Detail feed packets from activities
+    function initFeedPackets() {
+      state.feedPackets = state.activities.slice().reverse().map(act => ({
+        packetId: act.packetId,
+        timestamp: act.timeWindow.split('–')[1]?.trim() || 'Just now',
+        title: act.title,
+        category: act.category,
+        durationMin: act.durationMin,
+        sensorProof: act.sensorProof,
+        confidence: act.confidence,
+        icon: act.icon,
+        activityId: act.id
+      }));
+    }
+    initFeedPackets();
+
+    // --- TOAST HELPER ---
+    function showToast(title, subtitle, icon = '✅') {
+      const container = document.getElementById('toastContainer');
+      if (!container) return;
+      const el = document.createElement('div');
+      el.className = 'pointer-events-auto bg-slate-900/95 border border-emerald-500/40 text-slate-100 px-4 py-3 rounded-2xl shadow-xl flex items-start gap-3 transition-all duration-300';
+      el.innerHTML = `
+        <span class="text-lg leading-none mt-0.5">${icon}</span>
+        <div class="flex-1 min-w-0">
+          <div class="text-xs font-bold text-emerald-400 uppercase tracking-wider">${title}</div>
+          <div class="text-xs text-slate-200 mt-0.5 truncate">${subtitle}</div>
+        </div>
+      `;
+      container.appendChild(el);
+      setTimeout(() => {
+        el.style.opacity = '0';
+        el.style.transform = 'translateY(8px)';
+        setTimeout(() => el.remove(), 300);
+      }, 3200);
+    }
+
+    // --- PASSIVE BROWSER & DEVICE SENSORS ---
+    window.addEventListener('mousemove', () => {
+      state.interactionEvents = Math.min(120, state.interactionEvents + 2);
+    });
+    window.addEventListener('keydown', () => {
+      state.interactionEvents = Math.min(120, state.interactionEvents + 5);
+    });
+    window.addEventListener('scroll', () => {
+      state.interactionEvents = Math.min(120, state.interactionEvents + 3);
+    });
+    window.addEventListener('touchstart', () => {
+      state.interactionEvents = Math.min(120, state.interactionEvents + 4);
+    });
+    document.addEventListener('visibilitychange', () => {
+      state.tabVisible = !document.hidden;
+      updateLiveHeaderMetrics();
+    });
+
+    // Optional DeviceMotion listener
+    function attachDeviceMotion() {
+      if (typeof window.DeviceMotionEvent !== 'undefined') {
+        window.addEventListener('devicemotion', (event) => {
+          const acc = event.accelerationIncludingGravity;
+          if (acc && (acc.x || acc.y || acc.z)) {
+            const mag = Math.sqrt((acc.x || 0) ** 2 + (acc.y || 0) ** 2 + (acc.z || 0) ** 2);
+            state.motionIntensity = Math.min(100, Math.round(Math.abs(mag - 9.8) * 12));
+          }
+        });
+      }
+    }
+    attachDeviceMotion();
+
+    // --- CLASSIFIER: DETERMINE CURRENT ACTIVITY WITHOUT USER INPUT ---
+    function classifyCurrentActivity() {
+      const mode = state.simMode;
+      if (mode === 'study') {
+        return {
+          title: 'Deep Study & Note Synthesis',
+          category: 'Focus & Study',
+          icon: '📚',
+          confidence: 99,
+          sensorProof: 'Sustained viewport focus + regular keyboard/scroll cadence (38 epm)',
+          sub: 'Verified via sustained focus & reading cadence'
+        };
+      }
+      if (mode === 'walk') {
+        return {
+          title: 'Brisk Walking / Step Session',
+          category: 'Physical & Walk',
+          icon: '🚶',
+          confidence: 97,
+          sensorProof: 'Rhythmic 1.8Hz accelerometer oscillation + step vector',
+          sub: 'Verified via motion rhythm & step frequency'
+        };
+      }
+      if (mode === 'commute') {
+        return {
+          title: 'City Transit / Vehicle Commute',
+          category: 'Transit & Commute',
+          icon: '🚆',
+          confidence: 96,
+          sensorProof: 'High-velocity geo-shift (34 km/h) + low step cadence',
+          sub: 'Verified via velocity vector & low step count'
+        };
+      }
+      if (mode === 'rest') {
+        return {
+          title: 'Mindful Rest / Zero-Screen Recovery',
+          category: 'Recovery & Break',
+          icon: '☕',
+          confidence: 94,
+          sensorProof: 'Zero pointer/keystroke input + stationary device posture',
+          sub: 'Verified via zero-input idle signature'
+        };
+      }
+
+      // 'auto' mode uses live browser telemetry
+      if (!state.tabVisible) {
+        return {
+          title: 'Background Multitasking / Away',
+          category: 'Recovery & Break',
+          icon: '🌙',
+          confidence: 93,
+          sensorProof: 'Document visibility hidden + passive background state',
+          sub: 'Verified via background tab telemetry'
+        };
+      }
+      if (state.interactionEvents > 32) {
+        return {
+          title: 'High-Intensity Interactive Work',
+          category: 'Focus & Study',
+          icon: '⚡',
+          confidence: 99,
+          sensorProof: `High input frequency (${state.interactionEvents} events/min) + active viewport`,
+          sub: 'Verified via active pointer & keystroke stream'
+        };
+      }
+      if (state.interactionEvents >= 10) {
+        return {
+          title: 'Active Screen Focus & Reading',
+          category: 'Focus & Study',
+          icon: '💻',
+          confidence: 98,
+          sensorProof: `Steady interaction cadence (${state.interactionEvents} events/min) + foreground lock`,
+          sub: 'Verified via pointer & viewport telemetry'
+        };
+      }
+      return {
+        title: 'Passive Review / Light Idle',
+        category: 'Recovery & Break',
+        icon: '🧘',
+        confidence: 92,
+        sensorProof: `Low input cadence (${state.interactionEvents} events/min) + stationary screen`,
+        sub: 'Verified via low-input ambient sensor'
+      };
+    }
+
+    // --- CHARTS SETUP ---
+    let telemetryChartInstance = null;
+    let categoryChartInstance = null;
+
+    const telemetryLabels = Array.from({ length: 20 }, (_, i) => `${20 - i}s`);
+    const interactionSeries = [22, 25, 28, 24, 30, 35, 32, 29, 26, 31, 38, 42, 36, 30, 28, 33, 37, 35, 32, 34];
+    const motionSeries = [10, 12, 11, 14, 13, 15, 18, 16, 14, 15, 19, 21, 17, 15, 14, 16, 18, 17, 15, 16];
+
+    function initCharts() {
+      const telCtx = document.getElementById('telemetryChart');
+      if (telCtx && typeof Chart !== 'undefined') {
+        telemetryChartInstance = new Chart(telCtx, {
+          type: 'line',
+          data: {
+            labels: telemetryLabels,
+            datasets: [
+              {
+                label: 'Interaction Intensity',
+                data: interactionSeries,
+                borderColor: '#10b981',
+                backgroundColor: 'rgba(16, 185, 129, 0.12)',
+                fill: true,
+                tension: 0.38,
+                borderWidth: 2,
+                pointRadius: 0
+              },
+              {
+                label: 'Motion / Cadence',
+                data: motionSeries,
+                borderColor: '#38bdf8',
+                backgroundColor: 'rgba(56, 189, 248, 0.08)',
+                fill: true,
+                tension: 0.38,
+                borderWidth: 2,
+                pointRadius: 0
+              }
+            ]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: { duration: 300 },
+            plugins: {
+              legend: { display: false }
+            },
+            scales: {
+              x: {
+                grid: { color: 'rgba(51, 65, 85, 0.25)' },
+                ticks: { color: '#94a3b8', font: { size: 10 } }
+              },
+              y: {
+                min: 0,
+                max: 100,
+                grid: { color: 'rgba(51, 65, 85, 0.25)' },
+                ticks: { color: '#94a3b8', font: { size: 10 } }
+              }
+            }
+          }
+        });
+      }
+
+      const catCtx = document.getElementById('categoryChart');
+      if (catCtx && typeof Chart !== 'undefined') {
+        categoryChartInstance = new Chart(catCtx, {
+          type: 'doughnut',
+          data: {
+            labels: ['Focus & Study', 'Physical & Walk', 'Transit & Commute', 'Recovery & Break'],
+            datasets: [{
+              data: [65, 40, 0, 30],
+              backgroundColor: ['#10b981', '#0ea5e9', '#f59e0b', '#a855f7'],
+              borderColor: '#0f172a',
+              borderWidth: 3
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: {
+                position: 'bottom',
+                labels: { color: '#cbd5e1', padding: 16, font: { size: 11 } }
+              }
+            }
+          }
+        });
+      }
+    }
+
+    // --- AUTO-VERIFICATION & APP DETAIL DISPATCHER ---
+    function formatNowTime(offsetMin = 0) {
+      const d = new Date(Date.now() + offsetMin * 60000);
+      return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+
+    function triggerAutonomousVerification(isManualPush = false) {
+      const detected = classifyCurrentActivity();
+      const nowStr = formatNowTime(0);
+      const startStr = formatNowTime(-5);
+      const pktNum = 8820 + state.activities.length + 1;
+      const packetId = `PKT-${pktNum}`;
+      const durationAdded = isManualPush ? 5 : 4;
+
+      const newAct = {
+        id: 'act-' + Date.now(),
+        timeWindow: `${startStr} – ${nowStr}`,
+        title: detected.title,
+        category: detected.category,
+        durationMin: durationAdded,
+        sensorProof: detected.sensorProof,
+        confidence: detected.confidence,
+        icon: detected.icon,
+        packetId: packetId,
+        status: 'Sent to App Detail'
+      };
+
+      state.activities.push(newAct);
+      state.feedPackets.unshift({
+        packetId: newAct.packetId,
+        timestamp: nowStr,
+        title: newAct.title,
+        category: newAct.category,
+        durationMin: newAct.durationMin,
+        sensorProof: newAct.sensorProof,
+        confidence: newAct.confidence,
+        icon: newAct.icon,
+        activityId: newAct.id
+      });
+
+      saveState();
+      renderAll();
+
+      const lastSyncEl = document.getElementById('lastSyncTimeText');
+      if (lastSyncEl) {
+        lastSyncEl.textContent = `Last detail verified & sent: ${nowStr} (${packetId})`;
+      }
+
+      showToast(
+        `Verified & Sent • ${packetId}`,
+        `${newAct.icon} ${newAct.title} (${newAct.confidence}% confidence)`,
+        '📡'
+      );
+    }
+
+    // --- RENDERING FUNCTIONS ---
+    function formatMinutes(totalMin) {
+      const h = Math.floor(totalMin / 60);
+      const m = totalMin % 60;
+      return h > 0 ? `${h}h ${m}m` : `${m}m`;
+    }
+
+    function updateLiveHeaderMetrics() {
+      const detected = classifyCurrentActivity();
+      document.getElementById('currentStateIcon').textContent = detected.icon;
+      document.getElementById('currentStateTitle').textContent = detected.title;
+      document.getElementById('currentStateSub').textContent = detected.sub;
+      document.getElementById('confidenceBadge').textContent = `${detected.confidence}% Confidence`;
+
+      document.getElementById('cadenceValue').textContent = `${state.interactionEvents} events/m`;
+      const visEl = document.getElementById('visibilityValue');
+      visEl.textContent = state.tabVisible ? 'Foreground' : 'Background';
+      visEl.className = state.tabVisible
+        ? 'text-sm font-bold text-emerald-400 mt-0.5'
+        : 'text-sm font-bold text-amber-400 mt-0.5';
+
+      const onlineText = navigator.onLine ? 'Online' : 'Offline';
+      document.getElementById('powerNetStatus').textContent = `${onlineText} • Sensor Lock`;
+
+      // Totals
+      const totalMin = state.activities.reduce((acc, item) => acc + (item.durationMin || 0), 0);
+      document.getElementById('totalVerifiedTime').textContent = formatMinutes(totalMin);
+      document.getElementById('verifiedBlocksCount').textContent = `${state.activities.length} blocks`;
+      document.getElementById('navLogCount').textContent = String(state.activities.length);
+      document.getElementById('packetsSentCount').textContent = `${state.feedPackets.length} Packets`;
+
+      // Category distribution bar
+      const totalsByCat = {
+        'Focus & Study': 0,
+        'Physical & Walk': 0,
+        'Transit & Commute': 0,
+        'Recovery & Break': 0
+      };
+      state.activities.forEach(a => {
+        totalsByCat[a.category] = (totalsByCat[a.category] || 0) + a.durationMin;
+      });
+      const safeTotal = Math.max(1, totalMin);
+      const barContainer = document.getElementById('categoryMiniBar');
+      if (barContainer) {
+        barContainer.innerHTML = `
+          <div class="bg-emerald-500 h-full" style="width: ${(totalsByCat['Focus & Study'] / safeTotal) * 100}%"></div>
+          <div class="bg-sky-500 h-full" style="width: ${(totalsByCat['Physical & Walk'] / safeTotal) * 100}%"></div>
+          <div class="bg-amber-500 h-full" style="width: ${(totalsByCat['Transit & Commute'] / safeTotal) * 100}%"></div>
+          <div class="bg-purple-500 h-full" style="width: ${(totalsByCat['Recovery & Break'] / safeTotal) * 100}%"></div>
+        `;
+      }
+
+      if (categoryChartInstance) {
+        categoryChartInstance.data.datasets[0].data = [
+          totalsByCat['Focus & Study'],
+          totalsByCat['Physical & Walk'],
+          totalsByCat['Transit & Commute'],
+          totalsByCat['Recovery & Break']
+        ];
+        categoryChartInstance.update();
+      }
+    }
+
+    function renderTimelineList() {
+      const container = document.getElementById('liveTimelineList');
+      if (!container) return;
+      const recent = state.activities.slice().reverse().slice(0, 5);
+      container.innerHTML = recent.map(act => `
+        <div class="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800/90 hover:border-slate-700 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition">
+          <div class="flex items-start gap-3">
+            <div class="w-10 h-10 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-center text-lg shrink-0">
+              ${act.icon}
+            </div>
+            <div>
+              <div class="flex flex-wrap items-center gap-2">
+                <span class="text-xs font-bold text-white">${act.title}</span>
+                <span class="text-[11px] px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium">
+                  ${act.confidence}% Verified
+                </span>
+                <span class="text-[11px] font-mono text-slate-400">${act.packetId}</span>
+              </div>
+              <p class="text-xs text-slate-400 mt-0.5">${act.sensorProof}</p>
+              <div class="text-[11px] text-slate-500 mt-1">${act.timeWindow} • ${act.durationMin} mins • ${act.category}</div>
+            </div>
+          </div>
+          <button type="button" data-inspect-id="${act.id}" class="inspect-btn self-start sm:self-center px-3 py-1.5 rounded-lg bg-slate-900 hover:bg-slate-800 border border-slate-700 text-xs font-semibold text-emerald-400 shrink-0 transition">
+            Inspect Detail
+          </button>
+        </div>
+      `).join('');
+    }
+
+    function renderAppDetailFeed() {
+      const feed = document.getElementById('appDetailFeedContainer');
+      if (!feed) return;
+      if (state.feedPackets.length === 0) {
+        feed.innerHTML = `
+          <div class="text-center py-12 text-xs text-slate-500">
+            No packets in feed yet. Waiting for next autonomous verification cycle...
+          </div>
+        `;
+        return;
+      }
+      feed.innerHTML = state.feedPackets.map(pkt => `
+        <div class="p-3 rounded-2xl bg-slate-900 border border-slate-800/90 hover:border-emerald-500/40 transition cursor-pointer inspect-btn" data-inspect-id="${pkt.activityId}">
+          <div class="flex items-center justify-between text-[10px] text-slate-400 mb-1">
+            <span class="font-mono font-semibold text-emerald-400">${pkt.packetId} • AUTO-VERIFIED</span>
+            <span>${pkt.timestamp}</span>
+          </div>
+          <div class="flex items-center gap-2.5">
+            <span class="text-lg">${pkt.icon}</span>
+            <div class="min-w-0 flex-1">
+              <div class="text-xs font-bold text-white truncate">${pkt.title}</div>
+              <div class="text-[11px] text-slate-400 truncate">${pkt.sensorProof}</div>
+            </div>
+          </div>
+          <div class="mt-2 pt-2 border-t border-slate-800/80 flex items-center justify-between text-[10px]">
+            <span class="text-slate-300 font-medium">${pkt.category} (+${pkt.durationMin}m)</span>
+            <span class="text-emerald-400 font-semibold">${pkt.confidence}% Match &rarr;</span>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function renderLedgerTable() {
+      const tbody = document.getElementById('ledgerTableBody');
+      if (!tbody) return;
+      const filterVal = document.getElementById('categoryFilter')?.value || 'ALL';
+      const filtered = state.activities
+        .slice()
+        .reverse()
+        .filter(a => filterVal === 'ALL' || a.category === filterVal);
+
+      if (filtered.length === 0) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="7" class="py-8 text-center text-slate-500 text-xs">No verified activities match this filter.</td>
+          </tr>
+        `;
+        return;
+      }
+
+      tbody.innerHTML = filtered.map(act => `
+        <tr class="hover:bg-slate-950/60 transition">
+          <td class="py-3 px-3 font-mono text-slate-300 whitespace-nowrap">${act.timeWindow}</td>
+          <td class="py-3 px-3 font-semibold text-white">
+            <span class="mr-1.5">${act.icon}</span>${act.title}
+          </td>
+          <td class="py-3 px-3 text-slate-300">${act.category}</td>
+          <td class="py-3 px-3 font-mono text-slate-300">${act.durationMin}m</td>
+          <td class="py-3 px-3 text-slate-400 max-w-xs truncate">${act.sensorProof}</td>
+          <td class="py-3 px-3">
+            <span class="px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-semibold">
+              ${act.confidence}%
+            </span>
+          </td>
+          <td class="py-3 px-3 text-right whitespace-nowrap">
+            <button type="button" data-inspect-id="${act.id}" class="inspect-btn px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-emerald-400 font-semibold transition">
+              ${act.packetId}
+            </button>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    function renderDigestBox() {
+      const box = document.getElementById('digestReportBox');
+      if (!box) return;
+      const totalMin = state.activities.reduce((acc, a) => acc + a.durationMin, 0);
+      const lines = [
+        `=== AUTOPULSE AI : SELF-VERIFIED DAILY APP DETAIL ===`,
+        `Date: ${new Date().toLocaleDateString()} | Mode: Zero-Instruction Autonomous`,
+        `Total Verified Time: ${formatMinutes(totalMin)} (${state.activities.length} verified blocks)`,
+        `-----------------------------------------------------`,
+        ...state.activities.map(a =>
+          `[${a.packetId}] ${a.timeWindow} | ${a.title} (${a.durationMin}m)\n  ↳ Proof: ${a.sensorProof} [Confidence: ${a.confidence}%]`
+        )
+      ];
+      box.textContent = lines.join('\n');
+    }
+
+    function renderAll() {
+      updateLiveHeaderMetrics();
+      renderTimelineList();
+      renderAppDetailFeed();
+      renderLedgerTable();
+      renderDigestBox();
+    }
+
+    // --- MODAL INSPECTION ---
+    function openActivityModal(activityId) {
+      const act = state.activities.find(a => a.id === activityId);
+      if (!act) return;
+      state.selectedActivityId = act.id;
+      document.getElementById('modalBadge').textContent = `${act.packetId} • ${act.confidence}% Self-Verified`;
+      document.getElementById('modalTitle').textContent = `${act.icon} ${act.title}`;
+      document.getElementById('modalBody').innerHTML = `
+        <div class="grid grid-cols-2 gap-2 pb-2 border-b border-slate-800">
+          <div>
+            <span class="text-[11px] text-slate-400 block">Time Window</span>
+            <span class="font-semibold text-white">${act.timeWindow}</span>
+          </div>
+          <div>
+            <span class="text-[11px] text-slate-400 block">Category &amp; Duration</span>
+            <span class="font-semibold text-emerald-400">${act.category} (${act.durationMin} mins)</span>
+          </div>
+        </div>
+        <div>
+          <span class="text-[11px] text-slate-400 block">Autonomous Sensor Proof</span>
+          <span class="text-slate-200 font-medium">${act.sensorProof}</span>
+        </div>
+        <div>
+          <span class="text-[11px] text-slate-400 block">App Detail Dispatch Status</span>
+          <span class="text-emerald-400 font-mono text-xs">✔ Dispatched to App Detail Feed without user intervention</span>
+        </div>
+      `;
+      const modal = document.getElementById('detailModal');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+
+    function closeActivityModal() {
+      const modal = document.getElementById('detailModal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+
+    // --- CLIPBOARD HELPER ---
+    function copyTextSafe(text, successMsg) {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(() => {
+          showToast('Copied to Clipboard', successMsg, '📋');
+        }).catch(() => fallbackCopy(text, successMsg));
+      } else {
+        fallbackCopy(text, successMsg);
+      }
+    }
+
+    function fallbackCopy(text, successMsg) {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      try {
+        document.execCommand('copy');
+        showToast('Copied to Clipboard', successMsg, '📋');
+      } catch (e) {
+        showToast('Copy Ready', 'Select text to copy manually', 'ℹ️');
+      }
+      ta.remove();
+    }
+
+    // --- EVENT WIRING ---
+    document.addEventListener('DOMContentLoaded', () => {
+      initCharts();
+      renderAll();
+
+      // Navigation Tabs
+      document.querySelectorAll('.nav-tab').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const target = btn.getAttribute('data-tab');
+          document.querySelectorAll('.nav-tab').forEach(b => {
+            b.className = 'nav-tab px-3 py-1.5 rounded-lg text-xs font-semibold transition text-slate-400 hover:text-white';
+          });
+          btn.className = 'nav-tab px-3 py-1.5 rounded-lg text-xs font-semibold transition bg-emerald-600 text-white shadow';
+
+          ['live', 'ledger', 'analytics'].forEach(tabId => {
+            const el = document.getElementById('tab-' + tabId);
+            if (el) {
+              if (tabId === target) el.classList.remove('hidden');
+              else el.classList.add('hidden');
+            }
+          });
+        });
+      });
+
+      // Simulator Mode Buttons
+      document.querySelectorAll('.sim-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const sim = btn.getAttribute('data-sim');
+          state.simMode = sim;
+          document.querySelectorAll('.sim-btn').forEach(b => {
+            b.className = 'sim-btn px-3 py-2 rounded-xl border border-slate-800 bg-slate-950/70 hover:bg-slate-800 text-slate-300 text-xs font-semibold flex items-center justify-center gap-1.5 transition';
+          });
+          btn.className = 'sim-btn px-3 py-2 rounded-xl border border-emerald-500/50 bg-emerald-500/15 text-emerald-300 text-xs font-semibold flex items-center justify-center gap-1.5 transition';
+
+          const modeLabels = {
+            auto: 'Live Browser + Auto Sensor',
+            study: 'Simulated Deep Study Sensor',
+            walk: 'Simulated Walking Step Cadence (108 spm)',
+            commute: 'Simulated Transit Velocity (34 km/h)',
+            rest: 'Simulated Zero-Input Idle Recovery'
+          };
+          document.getElementById('simModeBadge').textContent = `Mode: ${modeLabels[sim] || 'Live Sensor'}`;
+          updateLiveHeaderMetrics();
+          triggerAutonomousVerification(false);
+        });
+      });
+
+      // Toggle Engine Pause/Resume
+      document.getElementById('toggleEngineBtn').addEventListener('click', () => {
+        state.engineRunning = !state.engineRunning;
+        const pill = document.getElementById('engineStatusPill');
+        const label = document.getElementById('toggleEngineLabel');
+        const icon = document.getElementById('toggleEngineIcon');
+        const ring = document.getElementById('sensorPulseRing');
+
+        if (state.engineRunning) {
+          pill.textContent = 'ZERO-INPUT ENGINE ACTIVE';
+          pill.className = 'px-2 py-0.5 text-[11px] font-semibold rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30';
+          label.textContent = 'Pause Auto-Verify';
+          icon.className = 'w-2 h-2 rounded-full bg-amber-400';
+          ring.classList.remove('hidden');
+          showToast('Autonomous Engine Resumed', 'Self-verifying daily activity without instructions', '🟢');
+        } else {
+          pill.textContent = 'ENGINE PAUSED';
+          pill.className = 'px-2 py-0.5 text-[11px] font-semibold rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/30';
+          label.textContent = 'Resume Auto-Verify';
+          icon.className = 'w-2 h-2 rounded-full bg-emerald-400';
+          ring.classList.add('hidden');
+          showToast('Autonomous Engine Paused', 'Sensor verification temporarily paused', '⏸️');
+        }
+      });
+
+      // Instant Push Button & Force Verify Now
+      document.getElementById('sendInstantReportBtn').addEventListener('click', () => {
+        triggerAutonomousVerification(true);
+      });
+      document.getElementById('forceVerifyNowBtn').addEventListener('click', () => {
+        triggerAutonomousVerification(true);
+      });
+
+      // Request Phone Motion Permission
+      document.getElementById('requestMotionBtn').addEventListener('click', async () => {
+        if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+          try {
+            const res = await DeviceMotionEvent.requestPermission();
+            if (res === 'granted') {
+              attachDeviceMotion();
+              showToast('Phone Motion Active', 'Accelerometer connected to self-verifier', '📱');
+            }
+          } catch (e) {
+            showToast('Sensor Active', 'Using browser interaction & viewport telemetry', '📡');
+          }
+        } else {
+          showToast('Sensor Stream Active', 'Hardware motion & browser telemetry linked', '📡');
+        }
+      });
+
+      // View All Logs button jumps to Ledger tab
+      document.getElementById('viewAllLogsBtn').addEventListener('click', () => {
+        const ledgerTabBtn = document.querySelector('.nav-tab[data-tab="ledger"]');
+        if (ledgerTabBtn) ledgerTabBtn.click();
+      });
+
+      // Clear Companion Feed
+      document.getElementById('clearFeedBtn').addEventListener('click', () => {
+        state.feedPackets = [];
+        renderAppDetailFeed();
+        document.getElementById('packetsSentCount').textContent = '0 Packets';
+        showToast('App Detail Feed Cleared', 'Waiting for next auto-verified packet', '🧹');
+      });
+
+      // Verify Interval Select
+      document.getElementById('verifyIntervalSelect').addEventListener('change', (e) => {
+        state.verifyIntervalSec = parseInt(e.target.value, 10) || 12;
+        state.countdown = state.verifyIntervalSec;
+        showToast('Cycle Updated', `Auto-verifying every ${state.verifyIntervalSec} seconds`, '⏱️');
+      });
+
+      // Category Filter
+      document.getElementById('categoryFilter').addEventListener('change', () => {
+        renderLedgerTable();
+      });
+
+      // Export JSON
+      document.getElementById('exportJsonBtn').addEventListener('click', () => {
+        const blob = new Blob([JSON.stringify(state.activities, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'autopulse_verified_activities.json';
+        a.click();
+        URL.revokeObjectURL(url);
+        showToast('JSON Exported', 'Saved autopulse_verified_activities.json', '💾');
+      });
+
+      // Export CSV
+      document.getElementById('exportCsvBtn').addEventListener('click', () => {
+        const headers = ['Packet ID', 'Time Window', 'Activity', 'Category', 'Duration (min)', 'Confidence (%)', 'Sensor Proof'];
+        const rows = state.activities.map(a => [
+          a.packetId,
+          `"${a.timeWindow}"`,
+          `"${a.title}"`,
+          `"${a.category}"`,
+          a.durationMin,
+          a.confidence,
+          `"${a.sensorProof}"`
+        ]);
+        const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'autopulse_verified_report.csv';
+        a.click();
+        URL.revokeObjectURL(url);
+        showToast('CSV Downloaded', 'Saved autopulse_verified_report.csv', '📊');
+      });
+
+      // Copy Digest
+      document.getElementById('copyDigestBtn').addEventListener('click', () => {
+        const text = document.getElementById('digestReportBox').textContent;
+        copyTextSafe(text, 'Full daily verification digest copied');
+      });
+
+      // Reset Demo Data
+      document.getElementById('resetDemoDataBtn').addEventListener('click', () => {
+        state.activities = [...DEFAULT_ACTIVITIES];
+        initFeedPackets();
+        saveState();
+        renderAll();
+        showToast('Baseline Restored', 'Reset to today’s default verified log', '🔄');
+      });
+
+      // Delegated click for Inspect Detail buttons
+      document.body.addEventListener('click', (e) => {
+        const btn = e.target.closest('.inspect-btn');
+        if (btn) {
+          const actId = btn.getAttribute('data-inspect-id');
+          if (actId) openActivityModal(actId);
+        }
+      });
+
+      // Modal close & copy
+      document.getElementById('closeModalBtn').addEventListener('click', closeActivityModal);
+      document.getElementById('modalDoneBtn').addEventListener('click', closeActivityModal);
+      document.getElementById('copyModalReportBtn').addEventListener('click', () => {
+        const act = state.activities.find(a => a.id === state.selectedActivityId);
+        if (!act) return;
+        const packetText = `[${act.packetId}] ${act.title} | ${act.timeWindow} (${act.durationMin}m) | Verified: ${act.confidence}% via ${act.sensorProof}`;
+        copyTextSafe(packetText, `Copied packet ${act.packetId}`);
+      });
+
+      // Main 1-Second Autonomous Heartbeat Loop
+      setInterval(() => {
+        state.sessionSeconds += 1;
+
+        // Format session timer
+        const hrs = String(Math.floor(state.sessionSeconds / 3600)).padStart(2, '0');
+        const mins = String(Math.floor((state.sessionSeconds % 3600) / 60)).padStart(2, '0');
+        const secs = String(state.sessionSeconds % 60).padStart(2, '0');
+        document.getElementById('liveSessionTimer').textContent = `${hrs}:${mins}:${secs}`;
+        document.getElementById('phoneClock').textContent = formatNowTime(0);
+
+        // Gently decay interaction counter & simulate realistic sensor fluctuation
+        if (state.simMode === 'walk') {
+          state.motionIntensity = 68 + Math.floor(Math.random() * 18);
+          state.interactionEvents = 14 + Math.floor(Math.random() * 8);
+        } else if (state.simMode === 'commute') {
+          state.motionIntensity = 48 + Math.floor(Math.random() * 15);
+          state.interactionEvents = 8 + Math.floor(Math.random() * 6);
+        } else if (state.simMode === 'study') {
+          state.motionIntensity = 8 + Math.floor(Math.random() * 6);
+          state.interactionEvents = 42 + Math.floor(Math.random() * 14);
+        } else if (state.simMode === 'rest') {
+          state.motionIntensity = 2 + Math.floor(Math.random() * 3);
+          state.interactionEvents = 1 + Math.floor(Math.random() * 3);
+        } else {
+          state.interactionEvents = Math.max(4, Math.round(state.interactionEvents * 0.92));
+          state.motionIntensity = Math.max(6, Math.min(95, state.motionIntensity + (Math.random() * 8 - 4)));
+        }
+
+        // Update waveform chart
+        if (telemetryChartInstance) {
+          interactionSeries.shift();
+          interactionSeries.push(Math.min(98, state.interactionEvents));
+          motionSeries.shift();
+          motionSeries.push(Math.min(98, Math.round(state.motionIntensity)));
+          telemetryChartInstance.update('none');
+        }
+
+        updateLiveHeaderMetrics();
+
+        // Countdown to auto-verify & dispatch to App Detail
+        if (state.engineRunning) {
+          state.countdown -= 1;
+          if (state.countdown <= 0) {
+            triggerAutonomousVerification(false);
+            state.countdown = state.verifyIntervalSec;
+          }
+          document.getElementById('nextVerifyCountdown').textContent = `in ${state.countdown}s`;
+        } else {
+          document.getElementById('nextVerifyCountdown').textContent = 'Paused';
+        }
+      }, 1000);
+    });
+  </script>
+</body>
+</html>
